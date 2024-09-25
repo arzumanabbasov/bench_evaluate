@@ -1,22 +1,12 @@
-# import random
-# import os
 import yaml
-
-# from typing import List
 import pandas as pd
+from transformers import AutoModelForQuestionAnswering, AutoTokenizer
+from base import *
+from qa_quality import *
+from multiple_choice import *
+from context_qa import *
 
-from multiple_choice import get_model_answer_multiple_options
-from multiple_choice import compare_answers
-
-from context_qa import get_answer_from_local_ollama_context
-from context_qa import get_evaluation_score_context
-
-from qa_quality import get_answer_from_local_ollama
-from qa_quality import get_evaluation_score, calculate_rouge_score, calculate_bleu_score, calculate_levenshtein_score
-
-
-# YAML file Metadata:
-
+# Load the YAML file Metadata
 with open('config.yaml', 'r') as file:
     config = yaml.safe_load(file)
 
@@ -25,47 +15,51 @@ metadata = config['metadata']
 dataset_files = config['dataset_files']
 results_file = config['output']['results_file']
 
-
-
-
 def get_benchmark_from_filename(filename, metadata):
     for ending, benchmark_type in metadata['dataset_naming_convention'].items():
         ending = ending + '.xlsx'
-
         if filename.endswith(ending):
             return benchmark_type
     raise ValueError(f"Filename {filename} does not match any known benchmark type")
 
-def handle_qa(question, actual_answer, model):
-    predicted_answer = get_answer_from_local_ollama(model, question)
-    # score = min(max(int(float(get_evaluation_score(question, predicted_answer, actual_answer))), 0), 100)
-    score = (0.25 * int(float(get_evaluation_score(question, actual_answer, predicted_answer)))) + calculate_bleu_score(actual_answer, predicted_answer) + calculate_rouge_score(actual_answer, predicted_answer) + calculate_levenshtein_score(actual_answer, predicted_answer)
+def handle_qa(question, actual_answer, model, tokenizer):
+    predicted_answer = get_answer_from_local_ollama(model, question, tokenizer)
+    score = (
+        0.25 * int(float(get_evaluation_score(question, predicted_answer, actual_answer))) + 
+        calculate_bleu_score(actual_answer, predicted_answer) + 
+        calculate_rouge_score(actual_answer, predicted_answer) + 
+        calculate_levenshtein_score(actual_answer, predicted_answer)
+    )
     return score
 
-def handle_multiple_choice(question, options, correct_option, model):
-    predicted_option = get_model_answer_multiple_options(question, options=options, model=model, dstype='mc')
-    # print(predicted_option)
+def handle_multiple_choice(question, options, correct_option, model, tokenizer):
+    predicted_option = get_model_answer_multiple_options(question, options=options, model=model, dstype='mc', tokenizer=tokenizer)
     score = compare_answers(actual_answer=correct_option, predicted_answer=predicted_option)
     return score
 
-def handle_context_qa(question, context, actual_answer, model):
-    predicted_answer = get_answer_from_local_ollama_context(model, question, context)
-    score = (0.25 * int(float(get_evaluation_score_context(question, actual_answer, predicted_answer)))) + calculate_bleu_score(actual_answer, predicted_answer) + calculate_rouge_score(actual_answer, predicted_answer) + calculate_levenshtein_score(actual_answer, predicted_answer)
+def handle_context_qa(question, context, actual_answer, model, tokenizer):
+    predicted_answer = get_answer_from_local_ollama_context(model, question, context, tokenizer)
+    score = (
+        0.25 * int(float(get_evaluation_score_context(question, actual_answer, predicted_answer))) + 
+        calculate_bleu_score(actual_answer, predicted_answer) + 
+        calculate_rouge_score(actual_answer, predicted_answer) + 
+        calculate_levenshtein_score(actual_answer, predicted_answer)
+    )
     return score
 
-def handle_topic_classification(question, topic_options, correct_topic, model):
-    predicted_topic = get_model_answer_multiple_options(question=question, model=model, options=topic_options, dstype='tc')
+def handle_topic_classification(question, topic_options, correct_topic, model, tokenizer):
+    predicted_topic = get_model_answer_multiple_options(question=question, model=model, tokenizer=tokenizer, options=topic_options, dstype='tc')
     print(predicted_topic)
     score = compare_answers(actual_answer=correct_topic, predicted_answer=predicted_topic)
     return score
 
-def run_benchmark(model_name, benchmark_type, df, results):
+def run_benchmark(model_name, tokenizer, benchmark_type, df, results):
     scores = []
     if benchmark_type == "QA":
         for index, row in df.iterrows():
             question = row['Sual']
             actual_answer = row['Cavab']
-            score = handle_qa(question, actual_answer, model_name)
+            score = handle_qa(question, actual_answer, model_name, tokenizer)
             scores.append(score)
     
     elif benchmark_type == "Reshad":
@@ -73,7 +67,7 @@ def run_benchmark(model_name, benchmark_type, df, results):
             question = row['text']
             options = row['options']
             correct_option = row['answer']
-            score = handle_topic_classification(question, options, correct_option, model_name)
+            score = handle_topic_classification(question, options, correct_option, model_name, tokenizer)
             scores.append(score)
 
     elif benchmark_type == "ContextQA":
@@ -81,7 +75,7 @@ def run_benchmark(model_name, benchmark_type, df, results):
             question = row['question']
             context = row['context']
             actual_answer = row['answer']
-            score = handle_context_qa(question, context, actual_answer, model_name)
+            score = handle_context_qa(question, context, actual_answer, model_name, tokenizer)
             scores.append(score)
 
     elif benchmark_type == "Arzuman":
@@ -89,7 +83,7 @@ def run_benchmark(model_name, benchmark_type, df, results):
             question = row['text']
             topic_options = row['options']
             correct_topic = row['answer']
-            score = handle_multiple_choice(question, topic_options, correct_topic, model_name)
+            score = handle_multiple_choice(question, topic_options, correct_topic, model_name, tokenizer)
             scores.append(score)
 
     else:
@@ -106,16 +100,15 @@ for file in dataset_files:
     print(f"Running {benchmark_type} benchmark for file: {file}")
     
     df = pd.read_excel(file)
-    df = df[:2]  
+    df = df[:2] 
     print(df)
 
-    for model_name in metadata['supported_models']:
+    for model_name in metadata['supported_models_hf']:
         print(f"Running {benchmark_type} for model {model_name}")
-        run_benchmark(model_name, benchmark_type, df, results)
+        model = AutoModelForQuestionAnswering.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        run_benchmark(model, tokenizer, benchmark_type, df, results)
 
 print("\nAverage Scores:\n", results)
 
-# results.to_excel("benchmark_results.xlsx", engine='openpyxl')
 results.to_excel(results_file)
-
-

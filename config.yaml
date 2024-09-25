@@ -5,6 +5,8 @@ metadata:
   supported_models:
     - llama3.1
     - llama3.1_az
+  suppotted_models_hf:
+    - "deepset/roberta-base-squad2"
   benchmark_types:
     QA: "Handles questions with simple Q&A format"
     Arzuman: "Handles questions with options where one is correct"

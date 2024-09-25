@@ -9,7 +9,6 @@ def get_model_answer_multiple_options(question, options, model) -> str:
     Sends a query to the model and retrieves the response.
 
     Args:
-        client: The Ollama client instance.
         question (str): The question to be categorized.
         options (str): The options for categorization.
         existing_answer (str): The existing answer.
