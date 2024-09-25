@@ -23,7 +23,7 @@ def get_benchmark_from_filename(filename, metadata):
     raise ValueError(f"Filename {filename} does not match any known benchmark type")
 
 def handle_qa(question, actual_answer, model, tokenizer):
-    predicted_answer = get_answer_from_local_ollama(model, question, tokenizer)
+    predicted_answer = get_answer_from_local_huggingface_context(model, question, None, tokenizer)
     score = (
         0.25 * int(float(get_evaluation_score(question, predicted_answer, actual_answer))) + 
         calculate_bleu_score(actual_answer, predicted_answer) + 
@@ -38,7 +38,7 @@ def handle_multiple_choice(question, options, correct_option, model, tokenizer):
     return score
 
 def handle_context_qa(question, context, actual_answer, model, tokenizer):
-    predicted_answer = get_answer_from_local_ollama_context(model, question, context, tokenizer)
+    predicted_answer = get_answer_from_local_huggingface_context(model, question, context, tokenizer)
     score = (
         0.25 * int(float(get_evaluation_score_context(question, actual_answer, predicted_answer))) + 
         calculate_bleu_score(actual_answer, predicted_answer) + 

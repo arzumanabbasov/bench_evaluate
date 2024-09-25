@@ -1,24 +1,6 @@
-# from dotenv import load_dotenv
-# import pandas as pd
-# import ollama
-# import logging
-# import time
-# from openai import OpenAI
-# import httpx
-
-
-# Configuration
-# BASE_URL_LLM = "https://integrate.api.nvidia.com/v1"
-# MODEL_LLAMA_3_1_405B = "meta/llama-3.1-405b-instruct"
-# NUM_RETRIES = 3
-# BASE_SLEEP_TIME = 1
-
-
-# client = ollama.Client()
-
-
 from base import *
-
+import logging
+import torch
 
 def create_combined_prompt_context(context: str, question: str) -> str:
     """
@@ -44,47 +26,40 @@ def create_combined_prompt_context(context: str, question: str) -> str:
         Provide a clear and accurate answer in Azerbaijani based on the context, and include your answer in 1-2 sentences.
     """
 
-
-def get_answer_from_local_ollama_context(model: str, question: str, context: str) -> str:
+def get_answer_from_local_huggingface_context(model, question: str, context: str, tokenizer) -> str:
     """
-    Send a prompt to the local Ollama model and retrieve the answer using the ollama library.
+    Send a prompt to the Hugging Face model and retrieve the answer based on the provided context and question.
+    
+    Args:
+        model: The Hugging Face model for question answering.
+        question (str): The question to be answered.
+        context (str): The context in which the question is to be answered.
+        tokenizer: The tokenizer associated with the model.
+    
+    Returns:
+        str: The generated answer based on the context and question.
     """
-    prompt = create_combined_prompt_context(context, question)
 
-    # Prepare messages for v2
-    system_message = "You are an answer generator AI in Azerbaijani. Your task is to generate answers based on the provided context and the given question."
-    messages = [
-        {'role': 'system', 'content': system_message},  # Set the system context
-        {'role': 'user', 'content': prompt}  # The user's prompt
-    ]
+    inputs = tokenizer.encode_plus(question, context, return_tensors="pt", truncation=True, padding=True)
 
-    stream = ollama.chat(
-        model=model,
-        messages=[{'role': 'user', 'content': prompt}], # v1
-        # messages=messages # v2
-        stream=True
-    )
+    with torch.no_grad():
+        outputs = model(**inputs)
     
-    answer = ''
-    try:
-        for chunk in stream:
-            answer += chunk['message']['content']
-    except Exception as e:
-        logging.error(f"Request to local Ollama failed: {e}")
-    
-    # if len(answer) > 200:
-    #     return ''
+    start_logits = outputs.start_logits
+    end_logits = outputs.end_logits
+
+    start_index = torch.argmax(start_logits)
+    end_index = torch.argmax(end_logits) + 1 
+
+    answer_tokens = inputs['input_ids'][0][start_index:end_index]
+    answer = tokenizer.decode(answer_tokens, skip_special_tokens=True)
+
     return answer.strip() if answer else "Error"
 
 def get_evaluation_score_context(question: str, actual_answer: str, predicted_answer: str) -> str:
     """
     Generate an evaluation score between 0 and 100 by comparing the actual and predicted answers.
     """
-    # httpx_client = httpx.Client(http2=True, verify=False)
-
-    # Initialize OpenAI client for NVIDIA
-    # client = OpenAI(base_url=BASE_URL_LLM, api_key=API_KEY_LLM, http_client=httpx_client)
-
 
     prompt = f"""
             Evaluate the following answers and provide a score from 0 to 100 based on how well the predicted
@@ -134,12 +109,6 @@ def get_evaluation_score_context(question: str, actual_answer: str, predicted_an
             else:
                 logging.error(f"Unexpected response format: {completion}")
         except Exception as e:
-            logging.error(f"Request failed: {e}")
-            # if attempt < NUM_RETRIES - 1:
-            #     sleep_time = BASE_SLEEP_TIME * (2 ** attempt)
-            #     logging.info(f"Retrying in {sleep_time} seconds...")
-            #     time.sleep(sleep_time)
-            # else:
-            #     return "No score received"
+            logging.error(f"Request to OpenAI failed: {e}")
     return "Error"
 
