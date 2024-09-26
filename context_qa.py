@@ -25,7 +25,6 @@ def create_combined_prompt_context(context: str, question: str) -> str:
 
         Provide a clear and accurate answer in Azerbaijani based on the context, and include your answer in 1-2 sentences.
     """
-
 def get_answer_from_local_huggingface_context(model, question: str, context: str, tokenizer) -> str:
     """
     Send a prompt to the Hugging Face model and retrieve the answer based on the provided context and question.
@@ -39,19 +38,28 @@ def get_answer_from_local_huggingface_context(model, question: str, context: str
     Returns:
         str: The generated answer based on the context and question.
     """
-
-    inputs = tokenizer.encode_plus(question, context, return_tensors="pt", truncation=True, padding=True)
-
-    with torch.no_grad():
-        outputs = model(**inputs)
     
+    # Encode inputs correctly to obtain tensors
+    inputs = tokenizer.encode_plus(question, context, return_tensors="pt", truncation=True, padding=True)
+    
+    # Ensure we are using tensors for the model inputs
+    input_ids = inputs['input_ids']
+    attention_mask = inputs.get('attention_mask')  # Include attention mask if available
+    
+    with torch.no_grad():
+        # Forward pass with inputs properly formatted as tensors
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+    
+    # Get the most likely start and end positions
     start_logits = outputs.start_logits
     end_logits = outputs.end_logits
 
-    start_index = torch.argmax(start_logits)
-    end_index = torch.argmax(end_logits) + 1 
-
-    answer_tokens = inputs['input_ids'][0][start_index:end_index]
+    # Convert logits to the predicted indices
+    start_index = torch.argmax(start_logits, dim=-1).item()
+    end_index = torch.argmax(end_logits, dim=-1).item() + 1
+    
+    # Extract the predicted answer tokens
+    answer_tokens = input_ids[0][start_index:end_index]
     answer = tokenizer.decode(answer_tokens, skip_special_tokens=True)
 
     return answer.strip() if answer else "Error"
