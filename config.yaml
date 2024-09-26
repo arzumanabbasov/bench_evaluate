@@ -20,9 +20,9 @@ metadata:
 
 dataset_files:
   - "datasets/input_datasets/LLM_BENCH_qa.xlsx"
-  # - "datasets/input_datasets/Quad_benchmark_cqa.xlsx"
-  # - "datasets/input_datasets/banking-benchmark-405b-vs-8b_mmlu_fqa.xlsx"
-  # - "datasets/input_datasets/LLM-Benchmark-reshad_tc.xlsx",
+  - "datasets/input_datasets/Quad_benchmark_cqa.xlsx"
+  - "datasets/input_datasets/banking-benchmark-405b-vs-8b_mmlu_fqa.xlsx"
+  - "datasets/input_datasets/LLM-Benchmark-reshad_tc.xlsx"
 
 output:
   results_file: "datasets/output_datasets/benchmark_results_yaml.xlsx"
